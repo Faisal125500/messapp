@@ -1,4 +1,17 @@
 import { auth, database } from './config.js';
+import { 
+    createUserWithEmailAndPassword, 
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+import { 
+    ref, 
+    set, 
+    get, 
+    onValue,
+    serverTimestamp 
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
 // DOM Elements
 const loginForm = document.getElementById('loginForm');
@@ -9,17 +22,17 @@ const registerModal = new bootstrap.Modal(document.getElementById('registerModal
 // Login Handler
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const username = loginForm.username.value;
+    const email = loginForm.username.value;
     const password = loginForm.password.value;
 
     try {
         // Sign in with email and password
-        const userCredential = await auth.signInWithEmailAndPassword(username, password);
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
         // Get user data from database
-        const userRef = database.ref(`users/${user.uid}`);
-        const snapshot = await userRef.once('value');
+        const userRef = ref(database, `users/${user.uid}`);
+        const snapshot = await get(userRef);
         const userData = snapshot.val();
 
         if (userData) {
@@ -41,29 +54,26 @@ loginForm.addEventListener('submit', async (e) => {
 registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fullName = registerForm.fullName.value;
-    const username = registerForm.username.value;
     const email = registerForm.email.value;
     const password = registerForm.password.value;
 
     try {
         // Create user with email and password
-        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
         // Create user profile in database
-        await database.ref(`users/${user.uid}`).set({
+        await set(ref(database, `users/${user.uid}`), {
             fullName,
-            username,
             email,
             role: 'member',
-            createdAt: firebase.database.ServerValue.TIMESTAMP
+            createdAt: serverTimestamp()
         });
 
         // Store user data in session storage
         sessionStorage.setItem('user', JSON.stringify({
             uid: user.uid,
             fullName,
-            username,
             email,
             role: 'member'
         }));
@@ -77,11 +87,11 @@ registerForm.addEventListener('submit', async (e) => {
 });
 
 // Auth State Observer
-auth.onAuthStateChanged((user) => {
+onAuthStateChanged(auth, (user) => {
     if (user) {
         // User is signed in
-        const userRef = database.ref(`users/${user.uid}`);
-        userRef.once('value').then((snapshot) => {
+        const userRef = ref(database, `users/${user.uid}`);
+        onValue(userRef, (snapshot) => {
             const userData = snapshot.val();
             if (userData) {
                 sessionStorage.setItem('user', JSON.stringify({
@@ -93,6 +103,17 @@ auth.onAuthStateChanged((user) => {
     } else {
         // User is signed out
         sessionStorage.removeItem('user');
+    }
+});
+
+// Logout Handler
+document.getElementById('logoutBtn')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+        await signOut(auth);
+        window.location.href = 'index.html';
+    } catch (error) {
+        showError('Logout failed: ' + error.message);
     }
 });
 
